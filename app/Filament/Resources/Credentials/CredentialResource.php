@@ -5,11 +5,13 @@ namespace App\Filament\Resources\Credentials;
 use App\Filament\Resources\Credentials\Pages\ManageCredentials;
 use App\Models\Credential;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
@@ -86,6 +88,54 @@ class CredentialResource extends Resource
             ->recordActions([
                 ViewAction::make(),
                 EditAction::make(),
+                Action::make('share')
+                    ->label('Share')
+                    ->icon('heroicon-o-share')
+                    ->form([
+                        Select::make('shared_with_type')
+                            ->label('Tipo de destino')
+                            ->options([
+                                'App\\Models\\User' => 'Usuario',
+                                'App\\Models\\Group' => 'Grupo',
+                            ])
+                            ->required(),
+                        Select::make('shared_with_id')
+                            ->label('Destino')
+                            ->options(function ($get) {
+                                if ($get('shared_with_type') === 'App\\Models\\User') {
+                                    return \App\Models\User::where('id', '!=', Filament::auth()->user()->id)
+                                        ->pluck('name', 'id');
+                                }
+                                if ($get('shared_with_type') === 'App\\Models\\Group') {
+                                    return \App\Models\Group::where('created_by', auth()->id())->pluck('name', 'id');
+                                }
+                                return [];
+                            })
+                            ->required()
+                            ->searchable(),
+                        Select::make('permission')
+                            ->label('Permission')
+                            ->options([
+                                'read' => 'Read Only',
+                                'write' => 'Read & Write',
+                            ])
+                            ->default('read')
+                            ->required(),
+                    ])
+                    ->action(function (array $data, Credential $record) {
+                        \App\Models\CredentialShare::updateOrCreate(
+                            [
+                                'credential_id' => $record->id,
+                                'shared_with_type' => $data['shared_with_type'],
+                                'shared_with_id' => $data['shared_with_id'],
+                            ],
+                            [
+                                'shared_by_user_id' => Filament::auth()->user()->id,
+                                'permission' => $data['permission'],
+                            ]
+                        );
+                    })
+                    ->modalHeading('Share Credential'),
                 DeleteAction::make(),
             ])
             ->toolbarActions([
@@ -94,6 +144,7 @@ class CredentialResource extends Resource
                 ]),
             ]);
     }
+
 
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {

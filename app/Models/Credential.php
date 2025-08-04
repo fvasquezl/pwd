@@ -41,4 +41,9 @@ class Credential extends Model
     {
         return $this->belongsTo(Category::class);
     }
+
+    public function canBeShared(): bool
+    {
+        return $this->category?->name !== 'Personal';
+    }
 }

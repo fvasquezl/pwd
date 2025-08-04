@@ -45,6 +45,9 @@ class GroupResource extends Resource
         return $schema
             ->components([
                 TextEntry::make('name'),
+                TextEntry::make('users.name')
+                    ->label('Usuarios')
+                    ->listWithLineBreaks(),
                 TextEntry::make('created_at')
                     ->dateTime(),
                 TextEntry::make('updated_at')
