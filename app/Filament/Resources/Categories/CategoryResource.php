@@ -30,9 +30,6 @@ class CategoryResource extends Resource
             ->components([
                 TextInput::make('name')
                     ->required(),
-                TextInput::make('user_id')
-                    ->required()
-                    ->numeric(),
             ]);
     }
 
@@ -41,8 +38,7 @@ class CategoryResource extends Resource
         return $schema
             ->components([
                 TextEntry::make('name'),
-                TextEntry::make('user_id')
-                    ->numeric(),
+                TextEntry::make('users.name'),
                 TextEntry::make('created_at')
                     ->dateTime(),
                 TextEntry::make('updated_at')
@@ -56,9 +52,6 @@ class CategoryResource extends Resource
             ->columns([
                 TextColumn::make('name')
                     ->searchable(),
-                TextColumn::make('user_id')
-                    ->numeric()
-                    ->sortable(),
                 TextColumn::make('created_at')
                     ->dateTime()
                     ->sortable()
@@ -81,6 +74,11 @@ class CategoryResource extends Resource
                     DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()->where('user_id', auth()->id());
     }
 
     public static function getPages(): array

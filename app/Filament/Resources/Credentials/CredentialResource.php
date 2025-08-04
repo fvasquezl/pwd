@@ -10,6 +10,7 @@ use Filament\Actions\DeleteAction;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Infolists\Components\TextEntry;
@@ -31,16 +32,17 @@ class CredentialResource extends Resource
             ->components([
                 TextInput::make('username')
                     ->required(),
-                Textarea::make('password')
-                    ->required()
+                TextInput::make('password')
+                    ->required(),
+                Textarea::make('description')
                     ->columnSpanFull(),
-                TextInput::make('description'),
-                TextInput::make('user_id')
-                    ->required()
-                    ->numeric(),
-                TextInput::make('category_id')
-                    ->required()
-                    ->numeric(),
+                Select::make('category_id')
+                    ->relationship(
+                        name: 'category',
+                        titleAttribute: 'name',
+                        modifyQueryUsing: fn($query) => $query->where('user_id', auth()->id())
+                    )
+                    ->required(),
             ]);
     }
 
@@ -50,10 +52,7 @@ class CredentialResource extends Resource
             ->components([
                 TextEntry::make('username'),
                 TextEntry::make('description'),
-                TextEntry::make('user_id')
-                    ->numeric(),
-                TextEntry::make('category_id')
-                    ->numeric(),
+                TextEntry::make('category.name'),
                 TextEntry::make('created_at')
                     ->dateTime(),
                 TextEntry::make('updated_at')
@@ -69,11 +68,7 @@ class CredentialResource extends Resource
                     ->searchable(),
                 TextColumn::make('description')
                     ->searchable(),
-                TextColumn::make('user_id')
-                    ->numeric()
-                    ->sortable(),
-                TextColumn::make('category_id')
-                    ->numeric()
+                TextColumn::make('category.name')
                     ->sortable(),
                 TextColumn::make('created_at')
                     ->dateTime()
@@ -97,6 +92,11 @@ class CredentialResource extends Resource
                     DeleteBulkAction::make(),
                 ]),
             ]);
+    }
+
+    public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
+    {
+        return parent::getEloquentQuery()->where('user_id', auth()->id());
     }
 
     public static function getPages(): array

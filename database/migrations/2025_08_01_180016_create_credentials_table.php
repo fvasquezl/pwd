@@ -13,8 +13,8 @@ return new class extends Migration {
         Schema::create('credentials', function (Blueprint $table) {
             $table->id();
             $table->string('username');
-            $table->text('password');
-            $table->string('description')->nullable();
+            $table->string('password');
+            $table->text('description')->nullable();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->foreignId('category_id')->constrained()->cascadeOnDelete();
             $table->timestamps();
