@@ -60,6 +60,24 @@ class CredentialResource extends Resource
                     ->dateTime(),
                 TextEntry::make('updated_at')
                     ->dateTime(),
+                TextEntry::make('shared_with')
+                    ->label('Compartido con')
+                    ->formatStateUsing(function ($state, $record) {
+                        $shares = $record->credentialShares ?? [];
+                        if (empty($shares)) {
+                            return '-';
+                        }
+                        return collect($shares)->map(function ($share) {
+                            if ($share->shared_with_type === 'App\\Models\\User') {
+                                return $share->sharedWith?->name;
+                            }
+                            if ($share->shared_with_type === 'App\\Models\\Group') {
+                                return 'Grupo: ' . ($share->sharedWith?->name ?? '');
+                            }
+                            return '';
+                        })->filter()->join("<br>");
+                    })
+                    ->html(),
             ]);
     }
 
@@ -81,6 +99,28 @@ class CredentialResource extends Resource
                     ->dateTime()
                     ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('shared_with')
+                    ->label('Compartido con')
+                    ->formatStateUsing(function ($state, $record) {
+
+                        $shares = $record->credentialShares ?? [];
+                        if (!is_array($shares) && !($shares instanceof \Countable)) {
+                            $shares = iterator_to_array($shares);
+                        }
+                        if (count($shares) === 0) {
+                            return '-';
+                        }
+                        return collect($shares)->map(function ($share) {
+                            if ($share->shared_with_type === 'App\\Models\\User') {
+                                return $share->sharedWith?->name;
+                            }
+                            if ($share->shared_with_type === 'App\\Models\\Group') {
+                                return 'Grupo: ' . ($share->sharedWith?->name ?? '');
+                            }
+                            return '';
+                        })->filter()->join("<br>");
+                    })
+                    ->html(),
             ])
             ->filters([
                 //
@@ -101,13 +141,51 @@ class CredentialResource extends Resource
                             ->required(),
                         Select::make('shared_with_id')
                             ->label('Destino')
-                            ->options(function ($get) {
+                            ->multiple()
+                            ->options(function ($get, $record) {
+                                $shares = $record->credentialShares ?? [];
                                 if ($get('shared_with_type') === 'App\\Models\\User') {
-                                    return \App\Models\User::where('id', '!=', Filament::auth()->user()->id)
-                                        ->pluck('name', 'id');
+                                    $ids = collect($shares)
+                                        ->where('shared_with_type', 'App\\Models\\User')
+                                        ->pluck('shared_with_id')
+                                        ->all();
+                                    $usuariosCompartidos = \App\Models\User::whereIn('id', $ids)
+                                        ->pluck('name', 'id')
+                                        ->toArray();
+                                    $usuariosNuevos = \App\Models\User::where('id', '!=', Filament::auth()->user()->id)
+                                        ->whereNotIn('id', $ids)
+                                        ->pluck('name', 'id')
+                                        ->toArray();
+                                    // Agrupa los compartidos y los nuevos en optgroups
+                                    $options = [];
+                                    if (!empty($usuariosCompartidos)) {
+                                        $options['Ya compartido'] = $usuariosCompartidos;
+                                    }
+                                    if (!empty($usuariosNuevos)) {
+                                        $options['Nuevo'] = $usuariosNuevos;
+                                    }
+                                    return $options;
                                 }
                                 if ($get('shared_with_type') === 'App\\Models\\Group') {
-                                    return \App\Models\Group::where('created_by', auth()->id())->pluck('name', 'id');
+                                    $ids = collect($shares)
+                                        ->where('shared_with_type', 'App\\Models\\Group')
+                                        ->pluck('shared_with_id')
+                                        ->all();
+                                    $gruposCompartidos = \App\Models\Group::whereIn('id', $ids)
+                                        ->pluck('name', 'id')
+                                        ->toArray();
+                                    $gruposNuevos = \App\Models\Group::where('created_by', auth()->id())
+                                        ->whereNotIn('id', $ids)
+                                        ->pluck('name', 'id')
+                                        ->toArray();
+                                    $options = [];
+                                    if (!empty($gruposCompartidos)) {
+                                        $options['Ya compartido'] = $gruposCompartidos;
+                                    }
+                                    if (!empty($gruposNuevos)) {
+                                        $options['Nuevo'] = $gruposNuevos;
+                                    }
+                                    return $options;
                                 }
                                 return [];
                             })
@@ -123,19 +201,24 @@ class CredentialResource extends Resource
                             ->required(),
                     ])
                     ->action(function (array $data, Credential $record) {
-                        \App\Models\CredentialShare::updateOrCreate(
-                            [
+                        $existing = \App\Models\CredentialShare::where([
+                            'credential_id' => $record->id,
+                            'shared_with_type' => $data['shared_with_type'],
+                            'shared_with_id' => $data['shared_with_id'],
+                        ])->first();
+                        if ($existing) {
+                            $existing->delete(); // Elimina el destino si ya existe
+                        } else {
+                            \App\Models\CredentialShare::create([
                                 'credential_id' => $record->id,
                                 'shared_with_type' => $data['shared_with_type'],
                                 'shared_with_id' => $data['shared_with_id'],
-                            ],
-                            [
                                 'shared_by_user_id' => Filament::auth()->user()->id,
                                 'permission' => $data['permission'],
-                            ]
-                        );
+                            ]);
+                        }
                     })
-                    ->modalHeading('Share Credential'),
+                    ->modalHeading('Compartir o eliminar destino'),
                 DeleteAction::make(),
             ])
             ->toolbarActions([
@@ -148,7 +231,9 @@ class CredentialResource extends Resource
 
     public static function getEloquentQuery(): \Illuminate\Database\Eloquent\Builder
     {
-        return parent::getEloquentQuery()->where('user_id', auth()->id());
+        return parent::getEloquentQuery()
+            ->where('user_id', auth()->id())
+            ->with(['credentialShares.sharedWith']);
     }
 
     public static function getPages(): array

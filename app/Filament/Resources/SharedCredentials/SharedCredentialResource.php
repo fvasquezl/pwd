@@ -16,6 +16,7 @@ use Filament\Actions\RestoreBulkAction;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
@@ -41,17 +42,17 @@ class SharedCredentialResource extends Resource
     {
         return $table
             ->columns([
-                \Filament\Tables\Columns\TextColumn::make('credential.username')
+                TextColumn::make('credential.username')
                     ->label('Usuario'),
-                \Filament\Tables\Columns\TextColumn::make('credential.password')
+                TextColumn::make('credential.password')
                     ->label('Contraseña'),
-                \Filament\Tables\Columns\TextColumn::make('credential.category.name')
+                TextColumn::make('credential.category.name')
                     ->label('Categoría'),
-                \Filament\Tables\Columns\TextColumn::make('sharedBy.name')
+                TextColumn::make('sharedBy.name')
                     ->label('Compartido por'),
-                \Filament\Tables\Columns\TextColumn::make('permission')
+                TextColumn::make('permission')
                     ->label('Permiso'),
-                \Filament\Tables\Columns\TextColumn::make('sharedWith.name')
+                TextColumn::make('sharedWith.name')
                     ->label('Compartido con')
                     ->formatStateUsing(function ($state, $record) {
                         if ($record->shared_with_type === 'App\\Models\\User') {

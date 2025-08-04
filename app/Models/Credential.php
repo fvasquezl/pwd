@@ -7,6 +7,13 @@ use Illuminate\Database\Eloquent\Model;
 
 class Credential extends Model
 {
+    /**
+     * Relación: destinos con los que se ha compartido esta credencial.
+     */
+    public function credentialShares()
+    {
+        return $this->hasMany(CredentialShare::class);
+    }
     /** @use HasFactory<\Database\Factories\CredentialFactory> */
     use HasFactory;
 
