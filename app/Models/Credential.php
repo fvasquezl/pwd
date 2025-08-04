@@ -19,6 +19,19 @@ class Credential extends Model
         'category_id',
     ];
 
+
+    /**
+     * Get the attributes that should be cast.
+     *
+     * @return array<string, string>
+     */
+    protected function casts(): array
+    {
+        return [
+            'password' => 'hashed',
+        ];
+    }
+
     public function user()
     {
         return $this->belongsTo(User::class);

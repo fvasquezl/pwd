@@ -35,10 +35,14 @@ class UserResource extends Resource
                 TextInput::make('email')
                     ->label('Email address')
                     ->email()
-                    ->required(),
+                    ->required()
+                    ->unique(ignoreRecord: true),
                 TextInput::make('password')
                     ->password()
-                    ->required(),
+                    ->required(fn($context) => $context === 'create')
+                    ->dehydrateStateUsing(fn($state) => filled($state) ? $state : null)
+                    ->dehydrated(fn($state) => filled($state))
+                    ->label('Password'),
             ]);
     }
 

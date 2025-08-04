@@ -51,6 +51,7 @@ class CredentialResource extends Resource
         return $schema
             ->components([
                 TextEntry::make('username'),
+                TextEntry::make('password'),
                 TextEntry::make('description'),
                 TextEntry::make('category.name'),
                 TextEntry::make('created_at')
