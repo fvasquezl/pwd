@@ -2,8 +2,13 @@
 
 namespace App\Filament\Resources\Credentials;
 
-use App\Filament\Resources\Credentials\Pages\ManageCredentials;
+use App\Filament\Resources\Credentials\Pages\CreateCredential;
+use App\Filament\Resources\Credentials\Pages\EditCredential;
+use App\Filament\Resources\Credentials\Pages\ListCredentials;
+use App\Filament\Resources\Credentials\RelationManagers\CredentialShareRelationManager;
 use App\Models\Credential;
+use App\Models\Group;
+use App\Models\User;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
@@ -12,6 +17,7 @@ use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Textarea;
@@ -21,6 +27,7 @@ use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\DB;
 
 class CredentialResource extends Resource
 {
@@ -132,93 +139,46 @@ class CredentialResource extends Resource
                     ->label('Share')
                     ->icon('heroicon-o-share')
                     ->form([
-                        Select::make('shared_with_type')
-                            ->label('Tipo de destino')
-                            ->options([
-                                'App\\Models\\User' => 'Usuario',
-                                'App\\Models\\Group' => 'Grupo',
-                            ])
-                            ->required(),
-                        Select::make('shared_with_id')
-                            ->label('Destino')
+                        Select::make('sharedUsers')
+                            ->label('Share with Users')
+                            ->options(User::where('id', '!=', auth()->id())->pluck('name', 'id'))
+                            ->default(fn(Credential $record) => $record->sharedUsers()->pluck('users.id')->toArray())
                             ->multiple()
-                            ->options(function ($get, $record) {
-                                $shares = $record->credentialShares ?? [];
-                                if ($get('shared_with_type') === 'App\\Models\\User') {
-                                    $ids = collect($shares)
-                                        ->where('shared_with_type', 'App\\Models\\User')
-                                        ->pluck('shared_with_id')
-                                        ->all();
-                                    $usuariosCompartidos = \App\Models\User::whereIn('id', $ids)
-                                        ->pluck('name', 'id')
-                                        ->toArray();
-                                    $usuariosNuevos = \App\Models\User::where('id', '!=', Filament::auth()->user()->id)
-                                        ->whereNotIn('id', $ids)
-                                        ->pluck('name', 'id')
-                                        ->toArray();
-                                    // Agrupa los compartidos y los nuevos en optgroups
-                                    $options = [];
-                                    if (!empty($usuariosCompartidos)) {
-                                        $options['Ya compartido'] = $usuariosCompartidos;
-                                    }
-                                    if (!empty($usuariosNuevos)) {
-                                        $options['Nuevo'] = $usuariosNuevos;
-                                    }
-                                    return $options;
-                                }
-                                if ($get('shared_with_type') === 'App\\Models\\Group') {
-                                    $ids = collect($shares)
-                                        ->where('shared_with_type', 'App\\Models\\Group')
-                                        ->pluck('shared_with_id')
-                                        ->all();
-                                    $gruposCompartidos = \App\Models\Group::whereIn('id', $ids)
-                                        ->pluck('name', 'id')
-                                        ->toArray();
-                                    $gruposNuevos = \App\Models\Group::where('created_by', auth()->id())
-                                        ->whereNotIn('id', $ids)
-                                        ->pluck('name', 'id')
-                                        ->toArray();
-                                    $options = [];
-                                    if (!empty($gruposCompartidos)) {
-                                        $options['Ya compartido'] = $gruposCompartidos;
-                                    }
-                                    if (!empty($gruposNuevos)) {
-                                        $options['Nuevo'] = $gruposNuevos;
-                                    }
-                                    return $options;
-                                }
-                                return [];
-                            })
-                            ->required()
                             ->searchable(),
-                        Select::make('permission')
-                            ->label('Permission')
-                            ->options([
-                                'read' => 'Read Only',
-                                'write' => 'Read & Write',
-                            ])
-                            ->default('read')
-                            ->required(),
+                        Select::make('sharedGroups')
+                            ->label('Share with Groups')
+                            ->options(Group::where('created_by', auth()->id())->pluck('name', 'id'))
+                            ->default(fn(Credential $record) => $record->sharedGroups()->pluck('groups.id')->toArray())
+                            ->multiple()
+                            ->searchable(),
                     ])
-                    ->action(function (array $data, Credential $record) {
-                        $existing = \App\Models\CredentialShare::where([
-                            'credential_id' => $record->id,
-                            'shared_with_type' => $data['shared_with_type'],
-                            'shared_with_id' => $data['shared_with_id'],
-                        ])->first();
-                        if ($existing) {
-                            $existing->delete(); // Elimina el destino si ya existe
-                        } else {
-                            \App\Models\CredentialShare::create([
-                                'credential_id' => $record->id,
-                                'shared_with_type' => $data['shared_with_type'],
-                                'shared_with_id' => $data['shared_with_id'],
-                                'shared_by_user_id' => Filament::auth()->user()->id,
-                                'permission' => $data['permission'],
-                            ]);
-                        }
+                    ->action(function (array $data, Credential $record): void {
+                        DB::transaction(function () use ($data, $record) {
+                            // 1. Delete all existing shares for this credential
+                            $record->credentialShares()->delete();
+
+                            // 2. Create new shares for selected users
+                            foreach ($data['sharedUsers'] ?? [] as $userId) {
+                                $record->credentialShares()->create([
+                                    'shared_with_type' => User::class,
+                                    'shared_with_id' => $userId,
+                                    'shared_by_user_id' => auth()->id(),
+                                    'permission' => 'read', // Or your desired default
+                                ]);
+                            }
+
+                            // 3. Create new shares for selected groups
+                            foreach ($data['sharedGroups'] ?? [] as $groupId) {
+                                $record->credentialShares()->create([
+                                    'shared_with_type' => Group::class,
+                                    'shared_with_id' => $groupId,
+                                    'shared_by_user_id' => auth()->id(),
+                                    'permission' => 'read', // Or your desired default
+                                ]);
+                            }
+                        });
                     })
-                    ->modalHeading('Compartir o eliminar destino'),
+                    ->modalHeading('Share Credential'),
                 DeleteAction::make(),
             ])
             ->toolbarActions([
@@ -236,10 +196,19 @@ class CredentialResource extends Resource
             ->with(['credentialShares.sharedWith']);
     }
 
+    public static function getRelations(): array
+    {
+        return [
+            CredentialShareRelationManager::class,
+        ];
+    }
+
     public static function getPages(): array
     {
         return [
-            'index' => ManageCredentials::route('/'),
+            'index' => ListCredentials::route('/'),
+            'create' => CreateCredential::route('/create'),
+            'edit' => EditCredential::route('/{record}/edit'),
         ];
     }
 }

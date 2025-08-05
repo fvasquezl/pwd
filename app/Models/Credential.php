@@ -53,4 +53,16 @@ class Credential extends Model
     {
         return $this->category?->name !== 'Personal';
     }
+
+    public function sharedUsers()
+    {
+        return $this->belongsToMany(User::class, 'credential_shares', 'credential_id', 'shared_with_id')
+            ->wherePivot('shared_with_type', User::class);
+    }
+
+    public function sharedGroups()
+    {
+        return $this->belongsToMany(Group::class, 'credential_shares', 'credential_id', 'shared_with_id')
+            ->wherePivot('shared_with_type', Group::class);
+    }
 }
